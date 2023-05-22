@@ -1,0 +1,1575 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+---
+title: "HARVARD University"
+subtitle: "CSCI E-106 Model Data Final Project"
+author:
+- Daniel Waldroop (dlwaldroop\@gmail.com)
+tags: linear regression, neural networks, logistic regression
+abstract: In this project, we build models to predict the price of homes based off data of over 20,000 King's County house sales in 2014 and 2015. Using 20 variables about various properties of the houses, we construct a variety of models, included linear, logistic, and neural net models, to predict price accurately. We review model diagnostics and apply appropriate transformations as needed. \n
+
+We test our models on approximately 6,000 observations in a test dataset. We select two final models which are highly predictive. First, a linear regression model with an R-squared of 0.86. Second, a neural network with an out-of-sample correlation of 88%. We discuss these models, their limitations, and how to monitor them.
+date: "`r format(Sys.time(), '%d %B %Y')`"
+geometry: margin=1.3cm
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+  html_document:
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+## House Sales in King County, USA data to be used in the Final Project
+
+|   Variable    | Description                                                                                                                                                                                           |
+|:------------------------------------:|:---------------------------------|
+|      id       | Unique ID for each home sold (it is not a predictor)                                                                                                                                                  |
+|     date      | *Date of the home sale*                                                                                                                                                                               |
+|     price     | *Price of each home sold*                                                                                                                                                                             |
+|   bedrooms    | *Number of bedrooms*                                                                                                                                                                                  |
+|   bathrooms   | *Number of bathrooms, where ".5" accounts for a bathroom with a toilet but no shower*                                                                                                                 |
+|  sqft_living  | *Square footage of the apartment interior living space*                                                                                                                                               |
+|   sqft_lot    | *Square footage of the land space*                                                                                                                                                                    |
+|    floors     | *Number of floors*                                                                                                                                                                                    |
+|  waterfront   | *A dummy variable for whether the apartment was overlooking the waterfront or not*                                                                                                                    |
+|     view      | *An index from 0 to 4 of how good the view of the property was*                                                                                                                                       |
+|   condition   | *An index from 1 to 5 on the condition of the apartment,*                                                                                                                                             |
+|     grade     | *An index from 1 to 13, where 1-3 falls short of building construction and design, 7 has an average level of construction and design, and 11-13 has a high-quality level of construction and design.* |
+|  sqft_above   | *The square footage of the interior housing space that is above ground level*                                                                                                                         |
+| sqft_basement | *The square footage of the interior housing space that is below ground level*                                                                                                                         |
+|   yr_built    | *The year the house was initially built*                                                                                                                                                              |
+| yr_renovated  | *The year of the house's last renovation*                                                                                                                                                             |
+|    zipcode    | *What zipcode area the house is in*                                                                                                                                                                   |
+|      lat      | *Latitude*                                                                                                                                                                                            |
+|     long      | *Longitude*                                                                                                                                                                                           |
+| sqft_living15 | *The square footage of interior housing living space for the nearest 15 neighbors*                                                                                                                    |
+|  sqft_lot15   | *The square footage of the land lots of the nearest 15 neighbors*                                                                                                                                     |
+
+## Executive Summary
+
+We use KC Home Sales Data to predict home prices in King County, USA. We
+processed this data and explored Linear, WLS, robust, ridge, elastic net
+lasso regressions, NN and logistic models and select models for use
+
+## I. Introduction
+
+The problem at hand is to provide estimates of home prices in King
+County, USA. These predictions could potentially be helpful in home
+appraisal and help determine the fair market value of a home.
+
+We build various models to predict the price of homes based off data of
+over 20,000 King's County house sales in 2014 and 2015. Using 20
+variables about various properties of the houses, we construct a variety
+of models, included linear, logistic, and neural net models, to predict
+price accurately.
+
+We reviewed model diagnostics with application of appropriate
+transformations as needed.
+
+We test our models on approximately 6,000 observations in the sampled
+test data set and provided performance of each of those in Section IV
+(d) and Section V. In the concluding sections, we make recommendations
+on the best models, their uses, and their limitations..
+
+## II. Description of the data and quality
+
+### a) Install packages and import data
+
+```{r, eval=FALSE, echo=TRUE}
+# Install packages
+install.packages("visdat") 
+install.packages("corrplot")
+install.packages("olsrr") 
+install.packages("lmtest")
+install.packages("rlist") 
+install.packages("glmnet")
+install.packages("fastDummies") 
+install.packages("neuralnet")
+install.packages('pscl') 
+install.packages('caret')
+install.packages('car')
+```
+
+```{r}
+# Import data
+kc.raw <- read.csv('https://raw.githubusercontent.com/dlw-github/kc_house_sales/main/KC_House_Sales.csv')
+```
+
+------------------------------------------------------------------------
+
+### b) Review data set
+
+As we see below, our raw data has 21 variables, including our outcome
+variable, price. There are 21,613 observations, in this case houses.
+There are no missing values for any variables.
+
+By looking at the overview of the data set and the first observations,
+we can already identify a few changes that will be needed, including
+parsing 'price' and 'date' from character variables into numeric
+variables, removing irrelevant variables like 'id', and transforming
+some variables, like 'waterfront', from numeric (continuous) to factor
+(categorical).
+
+We'll do most of our cleaning in Step D. In this step, the only changes
+we'll make is to parse 'price' and 'date' so that we can look at their
+distribution and the relationship of 'price' to the other variables
+before making further changes.
+
+```{r}
+# Get dataset dimensions
+cat('Raw data dimensions:', dim(kc.raw))
+```
+
+```{r}
+# Overview of variables
+library(dplyr) 
+glimpse(kc.raw)
+```
+
+```{r}
+# Check for missing values
+library(visdat) 
+vis_miss(kc.raw)
+```
+
+```{r}
+# Review first 5 observations
+head(kc.raw)
+```
+
+```{r}
+# Convert 'price' variable to numeric and 'date' variable to datetype
+library(readr) 
+kc.raw$price <- parse_number(kc.raw$price)
+kc.raw$date <- parse_number(kc.raw$date)
+```
+
+------------------------------------------------------------------------
+
+### c) Plot variable distributions and relationship with price
+
+Next we investigate the distribution of each variable and its
+relationship with our outcome, 'price' by plotting histograms,
+box-plots, and scatter-plots of each variable.
+
+Based on the distribution plots, we also take a closer look at some
+observations with abnormal variable values, such as houses with no
+bathrooms. There are 13 observations with 0 bedrooms and 10 observations
+with 0 bathrooms. While these values may be mis-codes, we don't have
+strong evidence for it. Potentially these were houses sold with
+incomplete construction. There is also 1 observation of a house with 33
+bedrooms. This value is far outside the range of bedrooms (nearly 32
+standard deviations from mean). This is possible mis-code of '3' but to
+be safe, we will drop this observation.
+
+| Variable      | Distribution                                                                                    | Relationship with 'price'                                    |
+|------------------|---------------------------------|---------------------|
+| id            | \-                                                                                              | \-                                                           |
+| date          | All values fall into the beginning of 2014 or the beginning of 2015                             | No clear indication of relationship                          |
+| price         | Long right tail (high priced homes)                                                             | \-                                                           |
+| bedrooms      | Tightly bunched at 1-5 bedrooms. Potential mis-codes at values of 0 and 33                      | Mild indication of positive relationship                     |
+| bathrooms     | Bunched around 1-4 bathrooms (including partial bathrooms). Potential mis-codes at values of 0. | Strong indication of positive relationship                   |
+| sqft_living   | Long right tail (large homes)                                                                   | Strong indication of positive relationship                   |
+| sqft_lot      | Long right tail (large lots)                                                                    | No clear indication of relationship                          |
+| floors        | Several values of half floors. Almost all observations between 1-2 floors                       | No clear indication of relationship                          |
+| waterfront    | \>99% values of 0. \<1% values of 1                                                             | No clear indication of relationship                          |
+| view          | \>95% values of 0. \<5% values 1-4.                                                             | No clear indication of relationship                          |
+| condition     | Values 1-5. \~70%=3, \~20%=4, \~10%=5, \~1%=1-3                                                 | Values 1-2 appear to have lower prices than 3-5.             |
+| grade         | Appears normally distributed around 7. Few obs. of values 1-3.                                  | Strong indication of positive relationship                   |
+| sqft_above    | Long right tail (large homes)                                                                   | Strong indication of positive relationship                   |
+| sqft_basement | \~75%=0. Long right tail (larger basements)                                                     | Among basements\>0, mild indication of positive relationship |
+| yr_built      | Average home built in 1970s.                                                                    | No clear indication of relationship                          |
+| yr_renovated  | \>\~99%=0                                                                                       | No clear indication of relationship                          |
+| zipcode       | No meaningful distribution                                                                      | No clear indication of relationship                          |
+| lat           | Longer left tail (lat\<47.5)                                                                    | Mild indication of non-linear relationship                   |
+| long          | Appears normally distributed around -122.2. Longer left tail                                    | No clear indication of relationship                          |
+| sqft_living15 | Appears normally distributed around 1900.                                                       | Strong indication of positive relationship                   |
+| sqft_lot15    | \>99% values of 0. Long right tail with potential outliers                                      | No clear indication of relationship                          |
+
+```{r}
+# Create histograms and boxplots of each variable to investigate distribution (skipping 'id')
+par(mfrow=c(1,3))
+
+for (col in 2:ncol(kc.raw)) {
+  hist(kc.raw[,col], xlab=names(kc.raw)[col], main='', labels=TRUE)
+  boxplot(kc.raw[,col], xlab=names(kc.raw)[col], main='')
+  plot(kc.raw[,col], kc.raw$price, xlab=names(kc.raw)[col], ylab='Price')
+}
+```
+
+```{r}
+# Investigate rows with strange values
+
+## 13 houses with 0 bedrooms
+kc.raw[kc.raw$bedrooms==0, ]
+
+## 10 houses with 0 bathrooms
+kc.raw[kc.raw$bathrooms==0, ]
+```
+
+```{r}
+# Investigate rows with strange values
+## 1 house with 33 bedrooms
+kc.raw[kc.raw$bedrooms==33, ]
+cat('33 bedrooms standard deviations from mean:', (33-mean(kc.raw$bedrooms)) / sd(kc.raw$bedrooms)) # Get standard deviations from mean
+kc.raw <- kc.raw[kc.raw$bedrooms!=33, ] # Drop observation
+cat('New dimensions:', dim(kc.raw))
+```
+
+------------------------------------------------------------------------
+
+### d) Investigate variable correlations
+
+Looking at the correlation charts and plots below, we identify several
+variables that may be correlated with 'price' and several that may be
+correlated with other predictors. These correlated predictor variables
+may lead to collinearity if they are both included in the model.
+
+The predictors most correlated with 'price' are:
+
+| Variable      | Correlation |
+|---------------|-------------|
+| sqft_living   | 0.70        |
+| grade         | 0.67        |
+| sqft_above    | 0.61        |
+| sqft_living15 | 0.59        |
+| bathrooms     | 0.53        |
+
+The predictors most correlated with other predictors are:
+
+| Variable 1    | Variable 2    | Correlation |
+|---------------|---------------|-------------|
+| sqft_living   | sqft_above    | 0.88        |
+| sqft_living   | grade         | 0.76        |
+| sqft_living   | sqft_living15 | 0.76        |
+| sqft_living15 | sqft_above    | 0.73        |
+| sqft_lot      | sqft_lot15    | 0.72        |
+| grade         | sqft_living15 | 0.71        |
+
+```{r}
+library(corrplot) 
+par(mfrow=c(1,1)) 
+kc.raw.corrs <- cor(kc.raw)
+corrplot(kc.raw.corrs, method = 'number', type='lower', number.cex =0.5) 
+cor(kc.raw)
+```
+
+```{r}
+#par(mfrow=c(1,1)) 
+#par(mar = c(1, 1, 1, 1))
+#pairs(kc.raw)
+```
+
+------------------------------------------------------------------------
+
+### e) Transform variables
+
+Based on the data exploration in the previous steps, we need to make
+various changes to our variables before fitting a model. There are
+several variables in this data set best described as ordinal, in which
+the variable is not truly continuous but the value labels are meaningful
+(ex. 2\>1 in a meaningful way). For indices, such as view, condition,
+and grade, we have turned these variables into factors (categorical
+variables). For discrete variables such as bedrooms, bathrooms, and
+floors, we have left them as numeric variables.
+
+Out of the 4 dummy variables created, 3 ('waterfront', 'renovated',
+'has_basement') appear to be related to 'price' while 'yr_sold' does
+not.
+
+| Variable      | Transformation                                 | Rationale                                                                                                                                                                                  |
+|------------------|------------------|------------------------------------|
+| id            | Remove                                         | Irrelevant index column                                                                                                                                                                    |
+| date          | Create dummy variable for year (2014\|2015)    | Observations are clustered at the start of each year. We are creating a time-series analysis                                                                                               |
+| price         | Change to numeric                              | Needs to be continuous. Originally coded as a character variable                                                                                                                           |
+| bedrooms      | Leave as continuous                            | Ordinal variable                                                                                                                                                                           |
+| bathrooms     | Leave as continuous                            | Ordinal variable                                                                                                                                                                           |
+| sqft_living   | \-                                             | \-                                                                                                                                                                                         |
+| sqft_lot      | \-                                             | \-                                                                                                                                                                                         |
+| floors        | Leave as continuous                            | Ordinal variable                                                                                                                                                                           |
+| waterfront    | Change to factor (yes \| no)                   | Categorical variable                                                                                                                                                                       |
+| view          | Change to factor (levels 0-4)                  | Ordinal variable                                                                                                                                                                           |
+| condition     | Change to factor (levels 1-5)                  | Ordinal variable                                                                                                                                                                           |
+| grade         | Change to factor (levels 3-13)                 | Ordinal variable. Bins 1-3 have between 1-2 observations each. In order to have all bins represented when splitting data (ex. train and test data), we combine these first 3 levels into 1 |
+| sqft_above    | \-                                             | \-                                                                                                                                                                                         |
+| sqft_basement | Change to factor (Has basement \| No basement) | As shown by the histogram, nearly all homes are without a basement. Changing to a categorical variable more succinctly describes the data                                                  |
+| yr_built      | \-                                             | \-                                                                                                                                                                                         |
+| yr_renovated  | Change to factor (Renovated \| Not renovated)  | As shown by the histogram, few homes have been renovated. Changing to a categorical variable more succinctly describes the data                                                            |
+| zipcode       | Change to factor (many categories)             | Categorical variable                                                                                                                                                                       |
+| lat           | Remove                                         | As instructed                                                                                                                                                                              |
+| long          | Remove                                         | As instructed                                                                                                                                                                              |
+| sqft_living15 | \-                                             | \-                                                                                                                                                                                         |
+| sqft_lot15    | \-                                             | \-                                                                                                                                                                                         |
+
+```{r}
+# Function: Transform raw dataset variables as needed
+
+clean_data <- function(raw.data) {
+
+  # Factorize categorical variables
+  raw.data$waterfront <- factor(raw.data$waterfront)
+  raw.data$view <- factor(raw.data$view)
+  raw.data$condition <- factor(raw.data$condition)
+  raw.data$zipcode <- factor(raw.data$zipcode)
+  
+  # Recategorize values 1&2 of grade and factorize
+  raw.data$grade[raw.data$grade==1] <- 3
+  raw.data$grade[raw.data$grade==2] <- 3
+  raw.data$grade <- factor(raw.data$grade)
+  
+  # Add dummies for renovation and basement
+  raw.data$renovated <- factor(ifelse(raw.data$yr_renovated>0, TRUE,
+  FALSE)) 
+  raw.data$hasBasement <- factor(ifelse(raw.data$sqft_basement>0,
+  TRUE, FALSE))
+  
+  # Split date variable into year sold
+  raw.data$year_sold <- factor(ifelse(raw.data$date>=20150000, 2015,
+  2014))
+  
+  # Remove unneeded columns 
+  raw.data <- subset(raw.data, select=-c(id,
+  date, sqft_basement, yr_renovated, lat, long))
+  
+  # Return cleaned dataset 
+  clean.data <- raw.data 
+    return (clean.data)
+
+}
+```
+
+```{r}
+# Clean data 
+kc.clean <- clean_data(kc.raw) 
+head(kc.clean)
+```
+
+```{r}
+# Plot relationship of new dummy variables against price
+par(mfrow=c(2,2)) 
+
+plot(kc.clean$waterfront, kc.clean$price, xlab='Waterfront', ylab='Price')
+plot(kc.clean$renovated, kc.clean$price, xlab='Renovated', ylab='Price')
+plot(kc.clean$hasBasement, kc.clean$price, xlab='hasBasement', ylab='Price') 
+plot(kc.clean$year_sold, kc.clean$price, xlab='year_sold', ylab='Price')
+```
+
+## III. Model Development Process
+
+### a) Create training and test data sets
+
+```{r}
+# Split data into training and test data
+set.seed(1023) 
+sample <- sample(c(TRUE, FALSE), nrow(kc.clean), replace=TRUE, prob=c(0.7,0.3)) 
+kc.train <- kc.clean[sample, ] 
+kc.test <- kc.clean[!sample, ]
+```
+
+------------------------------------------------------------------------
+
+### b) Fit linear model
+
+The first linear model we will fit includes all variables except for
+'year_sold' and 'sqft_above'. Based on our plots,'year_sold' does not
+appear related to price. The variable 'sqft_above' is equal to
+'sqft_living' - 'sqft_basement' (which we have turned into a dummy of
+basement\>0). We think that most of 'sqft_above's contribution will be
+captured by these other variables and its high correlation with them
+puts the model at risk for predictor collinearity.
+
+```{r}
+# Build simple regression model
+kc.linear <- lm(price ~ . -year_sold -sqft_above, data=kc.train)
+```
+
+```{r}
+# View regression summary
+summary(kc.linear) # R-squared is 0.84
+```
+
+```{r}
+# Review ANOVA table
+anova(kc.linear) # All variables appear significant
+```
+
+------------------------------------------------------------------------
+
+### c) Review diagnostic plots
+
+As we see in the diagnostic plots below, there is evidence that our data
+set doesn't adhere to some of the assumptions needed for linear
+regression.
+
+Looking at the residuals vs. fitted plot, we see a cone shape, with
+residuals growing as the fitted values increase. This indicates that the
+data may be non-linear and the predictors may need to be transformed.
+
+Looking at the scale-location plot, we see a strong bunching on
+observations and a non-horizontal spread. This indicates that variance
+of residuals is not constant and heteroscedasticity is present. To fix
+this, we may have to transform our outcome variable, 'price'.
+
+In the Q-Q plot, we see strong tails, which demonstrates that the
+residuals aren't distributed normally. Again, this indicates that
+transformation of the data is needed.
+
+Finally, in the residuals vs. leverage plot, we see an observation
+outside of Cook's distance (obs 7253). This indicates that we may need
+to correct for outliers or influential points.
+
+```{r}
+# Check model diagnostics
+par(mfrow=c(2,2)) 
+plot(kc.linear)
+```
+
+------------------------------------------------------------------------
+
+### d) Apply remedial techniques
+
+To fix our linear model, we first perform the Box-Cox test to see if a
+transformation in the outcome variable is warranted. We find that the
+optimal lambda is 0.08 and choose to transform price \<- log(price).
+
+```{r}
+# Perform Box-Cox test
+par(mfrow=c(2,2))
+library(MASS) 
+
+bc <-boxcox(kc.linear,lambda=seq(-1,1,by=.01))
+bc <-boxcox(kc.linear,lambda=seq(-0.5,0.5,by=.01)) 
+best_lambda <- bc$x[which.max(bc$y)]
+
+best_lambda # Optimal lambda value is 0.08
+```
+
+------------------------------------------------------------------------
+
+### e) Transform 'price' and review new model
+
+Creating a new model with the transformed outcome variable, we again
+look at the diagnostic plots to assess.
+
+Compared with the previous model, we see that our residuals vs. fitted
+plot is more amorphous (cloud-like). This may indicate that we do not
+need to transform the predictor variables. The Q-Q plot looks improved
+but still shows heavy tails, indicating that residuals still aren't
+normally distributed. The scale-location plot also looks improved, with
+the values equally spread out, although the trendline is still not
+completely horizontal. The residuals vs leverage plot shows no residuals
+outside of Cook's distance. Given the large sample (\~15,000
+observations), tests like Breusch-Pagan are too sensitive to give us
+more information.
+
+We do identify several high leverage points which are outliers, which
+may have an outsized effect on the model. Looking at these observations,
+we do not find reason to exclude them although it may be useful to
+weight the observations, which will will explore in the next section.
+
+As shown by the VIF table, there is no indication of multicollinearity
+in the model.
+
+```{r}
+# Plot distribution of log(price)
+hist(log(kc.clean$price)) # less skewed than the untransformed price, which had a longer right tail
+```
+
+```{r}
+# Transform 'price' to log\_(price) and create new linear model
+kc.linear.transformed <- lm(log(price) ~ . -year_sold -sqft_above, data = kc.train)
+```
+
+```{r}
+# Review regression summary
+summary(kc.linear.transformed) # R-squared has increased from 0.84 to 0.88
+```
+
+```{r}
+# Review ANOVA table
+anova(kc.linear.transformed) # All variables remain significant
+```
+
+```{r}
+# Plot relationship between predictors and log(price)
+## No relationships appear to be non-linear.
+
+par(mfrow=c(2,2))
+
+for (col in 2:ncol(kc.clean)) { 
+  plot(kc.clean[,col], log(kc.clean$price), xlab=names(kc.clean)[col], ylab='Log(Price)') 
+}
+```
+
+```{r}
+# Create diagnostic plots of new model
+par(mfrow=c(2,2)) 
+plot(kc.linear.transformed)
+```
+
+```{r}
+# Check for points of leverage and outliers
+par(mfrow=c(1,1)) 
+library(olsrr)
+
+ols_plot_resid_lev(kc.linear.transformed)
+ols_plot_cooksd_chart(kc.linear.transformed)
+```
+
+```{r}
+# Check for leverage points specifically (Leverages greater than 2p/n need to be inspected)
+
+n = nrow(kc.train) 
+p = length(kc.linear.transformed$coefficients)
+
+hat_vals = hatvalues(kc.linear.transformed) 
+plot(hat_vals, ylab="Leverages",main="Leverages vs Index Plot")
+
+abline(h=2*p/n,col="red")
+
+# From this leverage plot, we can see there are quite a few large leverage points that we should inspect further
+
+# Inspect leverage points (highest 15)
+
+sorted_hat_vals = sort(hat_vals) 
+sorted_inds = order(hat_vals)
+max_lev_inds = sorted_inds[c((n-14):n)]
+
+kc.train[max_lev_inds,]
+
+# Many of these leverage points appear to include some kind of outlying data, such as:
+# 1. Large lot size
+# 2. High (13) or low (3) grade
+```
+
+```{r}
+# Check for significant outliers with Bonferoni p-value test
+library(car) 
+outlier_test = outlierTest(kc.linear.transformed)
+outlier_test 
+outlier_inds = c(12778,1627,12552,1223,18333,21051,21373,13630,701,14836) 
+#B0 Null: There are no large outliers 
+#A0 Alternative: There are large outliers
+#alpha val = 0.05
+
+#According to this test, there are outliers with p-values less than 0.05, meaning we reject the null hypothesis and that there are large outliers potentially skewing the model
+```
+
+```{r}
+# Check for collinearity
+library(car) 
+vif(kc.linear.transformed)
+```
+
+## IV. Model Performance Testing
+
+### a) Create Stepwise model
+
+As we see below, the stepwise model is very similar the existing linear
+model. Its R-squared value on the training data is a little higher (0.88
+vs 0.84).
+
+```{r}
+# Create Stepwise-based model
+library(olsrr) 
+bothlm = ols_step_both_p(kc.linear.transformed, pent=0.05, prem=0.05) 
+kc.stepwise = bothlm$model
+```
+
+```{r}
+# Review regression summary
+summary(kc.stepwise) # R-squared is 0.88
+```
+
+```{r}
+# Review ANOVA table
+anova(kc.stepwise) # All variables significant
+```
+
+------------------------------------------------------------------------
+
+### b) Review diagnostic plots
+
+The diagnostic plots of the stepwise model look similar to those of the
+original model (the log transformed model developed in section III (e)).
+
+Residuals vs Fitted graph show the errors to be fairly constant (no
+Heteroskedasticity)
+
+The heavy tails visible in the Q-Q plot (but its much better compared to
+the Q-Q plot for Kc.linear model as shown in Section III (c)),
+indicating that the errors may not be exactly fully normally
+distributed.
+
+The VIF table doesn't reveal any problems with collinearity.
+
+```{r}
+# Create diagnostic plots of new model
+par(mfrow=c(2,2)) 
+plot(kc.stepwise)
+```
+
+```{r}
+# Check for multicollinearity
+library(car) 
+vif(kc.stepwise)
+```
+
+------------------------------------------------------------------------
+
+### c) Predict original and stepwise models using test data
+
+The two models perform almost identically, with a good fit on the test
+data. R-squared is 0.86 for both models.
+
+```{r}
+# Predict using original model
+kc.linear.transformed.pred <- predict(kc.linear.transformed, kc.test)
+kc.linear.transformed.pred <- exp(kc.linear.transformed.pred) # Undo log(price)
+```
+
+```{r}
+# Predict using stepwise model
+kc.stepwise.pred <- predict(kc.stepwise, kc.test) 
+kc.stepwise.pred <- exp(kc.stepwise.pred) # Undo log(price)
+```
+
+```{r}
+# Function to create summary statistics
+summary_stats <- function(actual_vals,pred_vals){ 
+  SST = var(actual_vals)*(length(actual_vals)-1) 
+  SSE = sum((actual_vals - pred_vals)^2) 
+  R2 = 1- SSE/SST 
+  MSE = SSE/length(actual_vals) 
+  RMSE = sqrt(MSE) 
+  summ_stats = list("SST" = SST,"SSE" = SSE, "R2" = R2, "MSE" = MSE,"RMSE" = RMSE) }
+```
+
+```{r}
+# Get evaluation statistics
+SST <- var(kc.test$price)*(length(kc.test$price)-1)
+
+# Original model
+
+original_stats = summary_stats(kc.test$price,kc.linear.transformed.pred) 
+SSE.original = original_stats$SSE
+R.Square.original = original_stats$R2 
+MSE.original = original_stats$MSE
+RMSE.original = original_stats$RMSE
+
+# Stepwise model
+
+step_stats = summary_stats(kc.test$price,kc.stepwise.pred) 
+SSE.stepwise = step_stats$SSE
+R.Square.stepwise = step_stats$R2 
+MSE.stepwise = step_stats$MSE
+RMSE.stepwise = step_stats$RMSE
+
+# Compare models
+
+original.results <- c(SSE.original, R.Square.original, MSE.original,
+RMSE.original) 
+stepwise.results <- c(SSE.stepwise, R.Square.stepwise,MSE.stepwise, RMSE.stepwise) 
+model.results <- as.data.frame(rbind(original.results, stepwise.results))
+names(model.results) <- c('SSE', 'R-Squared', 'MSE', 'RMSE')
+model.results
+```
+
+------------------------------------------------------------------------
+
+### d) Apply remedial methods and compare outcomes
+
+We perform WLS, robust, ridge, elastic net, and lasso regressions on our
+model to address influential points and multicollinearity. We also build
+models without leverage points or outliers.
+
+Examining the results, Stepwise, original, and robust regression models
+all perform very similarly. Since robust regression and WLS regression
+perform similarly, this indicates that the outliers didn't affect the
+performance of the original model that much. Also, directly removing the
+outliers and leverage points doesn't lead to a significant change in
+model performance. Since the model wasn't improved with lasso, elastic
+net, or ridge, this means that multicollinearity isn't a huge problem in
+the original model.
+
+```{r}
+library(glmnet) 
+library(MASS)
+
+# Get training data in correct format for glmnet
+x = model.matrix(price ~ . -year_sold -sqft_above,data = kc.train)[,-c(1)] # excludes price 
+y = log(kc.train$price)
+
+# Ridge
+kc.ridge = glmnet(x,y,alpha=0,nlambda=100,lambda.min.ratio=0.0001)
+kc.cvridge = cv.glmnet(x, y, alpha=0,nlambda=100,lambda.min.ratio=0.0001) 
+kc.best.ridgelamb =kc.cvridge$lambda.min
+
+# Lasso
+kc.lasso <- glmnet(x,y,alpha=1,nlambda=100,lambda.min.ratio=0.0001)
+kc.cvlasso <- cv.glmnet(x, y, alpha=1, nlambda=100,lambda.min.ratio=0.0001) 
+kc.best.lassolamb <- kc.cvlasso$lambda.min
+
+# Elastic Net
+kc.enet <- glmnet(x,y,alpha=0.5,nlambda=100,lambda.min.ratio=0.0001)
+kc.cvenet <- cv.glmnet(x, y, alpha=0.5,nlambda=100,lambda.min.ratio=0.0001) 
+kc.best.enetlamb = kc.cvenet$lambda.min
+
+par(mfrow=c(1,3)) 
+plot(kc.cvridge,main="Ridge")
+plot(kc.cvlasso,main="Lasso") 
+plot(kc.cvenet,main="Elastic Net")
+
+# Robust Regression (Huber)
+kc.rr = rlm(log(price) ~ . -year_sold -sqft_above, data=kc.train)
+
+# Without outliers \| leverage points
+kc.no_outlier <- lm(log(price) ~ . -year_sold -sqft_above, data = kc.train[-c(outlier_inds),]) 
+kc.no_lev <- lm(log(price) ~ . -year_sold -sqft_above, data = kc.train[-c(outlier_inds),])
+
+# Weighted least squares
+wt <- 1 /lm(abs(kc.linear.transformed$residuals) ~ kc.linear.transformed$fitted.values)$fitted.values^2
+kc.weighted <- lm(log(price) ~ . -year_sold -sqft_above, data = kc.train, weights=wt)
+```
+
+```{r}
+# Let's make predictions on the test data based on ridge, lasso, elastic net, and robust regression
+
+# Get test data in right format for glmnet
+x_test = model.matrix(price ~ . -year_sold -sqft_above,data = kc.test)[,-c(1)] #excludes price
+
+kc.ridge.pred = exp(predict(kc.ridge, s = kc.best.ridgelamb, newx =x_test)) 
+kc.lasso.pred = exp(predict(kc.lasso, s = kc.best.lassolamb, newx = x_test)) 
+kc.enet.pred = exp(predict(kc.enet, s =kc.best.enetlamb, newx = x_test))
+kc.rr.pred = exp(predict(kc.rr, kc.test))
+
+kc.no_lev_pred = exp(predict(kc.no_lev, kc.test)) 
+kc.no_outlier_pred = exp(predict(kc.no_outlier, kc.test)) 
+kc.weighted_pred <-exp(predict(kc.weighted, kc.test))
+```
+
+```{r}
+# Let's evaluate performance of these regression models vs. best stepwise model
+
+ridge_stats = summary_stats(kc.test$price,kc.ridge.pred) 
+lasso_stats = summary_stats(kc.test$price,kc.lasso.pred)
+enet_stats = summary_stats(kc.test$price,kc.enet.pred) 
+rr_stats = summary_stats(kc.test$price,kc.rr.pred)
+outlier_stats = summary_stats(kc.test$price,kc.no_outlier_pred) 
+lev_stats = summary_stats(kc.test$price,kc.no_lev_pred)
+wls_stats = summary_stats(kc.test$price,kc.weighted_pred)
+```
+
+```{r}
+# Compare all models
+original.results = c(SSE.original, R.Square.original, MSE.original,RMSE.original) 
+stepwise.results = c(SSE.stepwise, R.Square.stepwise,MSE.stepwise, RMSE.stepwise)
+ridge.results = c(ridge_stats$SSE, ridge_stats$R2,ridge_stats$MSE, ridge_stats$RMSE) 
+lasso.results = c(lasso_stats$SSE, lasso_stats$R2, lasso_stats$MSE, lasso_stats$RMSE)
+enet.results = c(enet_stats$SSE, enet_stats$R2, enet_stats$MSE, enet_stats$RMSE) 
+rr.results = c(rr_stats$SSE, rr_stats$R2, rr_stats$MSE, rr_stats$RMSE)
+outlier.results = c(outlier_stats$SSE, outlier_stats$R2, outlier_stats$MSE,outlier_stats$RMSE) 
+lev.results =c(lev_stats$SSE, lev_stats$R2, lev_stats$MSE, lev_stats$RMSE)
+weighted.results = c(wls_stats$SSE, wls_stats$R2,wls_stats$MSE, wls_stats$RMSE)
+```
+
+```{r}
+# Combine all results into one dataframe
+all.model.results = as.data.frame(rbind(original.results, stepwise.results,ridge.results,lasso.results,enet.results,rr.results,lev.results,outlier.results, weighted.results)) 
+
+names(all.model.results) = c('SSE', 'R-Squared', 'MSE', 'RMSE') 
+all.model.results
+```
+
+## V. Challenger Models
+
+We have elected to build a Neural Network Model to predict house prices.
+Before fitting the NN Model, we perform some data wrangling. The
+KC_House_Sales dataset has 70 different zipcodes. This is too many
+inputs into the model but we can not simply drop the zipcodes because
+location plays a significant part in determining real estate prices.
+Instead we categorize the zipcodes into three categories, 'below'
+average, 'average', and 'above' average. To accomplish this, the mean
+sale price was calculated for each zipcode. The mean prices are divided
+into three bins, which determines which category the zipcodes were
+assigned. Please see code for more details.
+
+Similarly, we want to retain the information contained in the date of
+the sales. This variable can have effect on price since home sales have
+seasonal effect. To preserve variable without adding twelve input, we
+convert the months into four quarters.
+
+We also had to perform some data cleaning and conversion on the 'view',
+'condition', 'grade', 'price', and 'date' variables. The final step was
+to normalized our data. The normalization function used in our
+processing is below:
+
+> **normalize \<- function(x) {return((x - min(x)) / (max(x) -
+> min(x)))}**
+
+After obtaining cleaning the dataset, we split the data into train and
+test datasets. The train dataset has 70% of the observations, and the
+test dataset has the remaining 30%. We begin by ordering the original
+dataset by 'date' of sales. The first 70% of the observations (15129)
+are used for training and the last 30% (6451) are used for testing. This
+approach allows us to perform out of sample testing, since our NN model
+is trained on data up to a certain date. The test is performed on sales
+that occurred beyond the training data. We also take a random sample
+(30% of the entire original dataset) to use for in-sample testing.
+
+In building the NN model, we use softplus as the activation function.
+
+> **softplus \<- function(x) { log(1 + exp(x)) }**
+
+We build three NN Models. All models have 23 input nodes and one output
+node. The first model has two hidden layers. Each layer has two nodes.
+The second model has two hidden layers, the first hidden layer has five
+nodes, and the second has three nodes. The third model also has two
+hidden layers, with each layer having five nodes. Training the models
+took a long time.
+
+After training the model, we use the compute() function to perform out
+of sample testing. The compute() function used the trained models to
+predict sales prices of houses in the testing dataset.
+
+We have to un-normalize our data before evaluating the models'
+performance. We used the following function to un-normalize our data:
+
+> unnormalize \<- function(x) {return((x \*
+> (max(kc.clean_p5$price))-min(kc.clean_p5$price)) +
+> min(kc.clean_p5\$price))}
+
+To determine the goodness of fit or how well the models perform we
+calculate the correlation between the predicted sale prices and the
+actual sale prices. The sum of square error (SSE) and root mean square
+error (RMSE) were also calculated to help determine the performance and
+compare models. The results of the three NN Models are shown below.
+
+**Out-of-Sample Test Results**
+
+> **NN Model 1:**
+
+> > Correlation for NN Model 1: 0.861773
+
+> > SSE for NN Model 1: 228720232489513.656250
+
+> > RMSE for NN Model 1: 187815.222375
+
+> **NN Model 2:**
+
+> > Correlation for NN model 2: 0.870657
+
+> > SSE for NN model 2: 214556939394524.500000
+
+> > RMSE for NN model 2: 181907.154170
+
+> **NN Model 3:**
+
+> > Correlation for NN model 3: 0.865082
+
+> > SSE for NN model 3: 221544139117928.875000
+
+> > RMSE for NN model 3: 184845.392454
+
+**In-Sample Test Results**
+
+\> **NN Model 1:** \>\> Correlation for NN Model 1: 0.874512
+
+> > SSE for NN Model 1: 210801929053382.250000
+
+> > RMSE for NN Model 1: 180768.922541
+
+> **NN Model 2:** \> Correlation for NN model 2: 0.886703
+
+> > SSE for NN model 2: 191388796388410.875000
+
+> > RMSE for NN model 2: 172244.250725
+
+> **NN Model 3:**
+
+> > Correlation for NN model 3: 0.888384
+
+> > SSE for NN model 3: 188429480620590.000000
+
+> > RMSE for NN model 3: 170907.414655
+
+In comparing the N Models, for out-of-sample testing, NN Model 2
+performs the best. It has the highest correlation, signifying high
+accuracy, and lowest RMSE. NN Model 3 performs the best for the
+in-sample testing. It too has the highest correlation and lowest RMSE.
+
+We believe NN Model 2 fits best for the purpose of estimating house
+price. We select this model because it performed best on out-of-sample
+testing. Real estate professionals are more interested in predicting
+future sale values.
+
+An advantage in using Neural Network models is that there are no model
+assumptions to contend with. The disadvantages of Neural Network models
+are that it takes a long time to train the models. Also the NN model can
+be easily over-fitted.
+
+**Logistic Regression:**
+
+We also explore using Logistic Regression to predict house prices. We
+are interested in predicting if a house will sell for over one million
+dollars. Since logistic regression is used when the dependent variable
+is binary, we need to transform the prices to binary form. In our case,
+we create a new variable called mil_plus. If the sale of the house is
+over one million dollars, mil_plus is set to 1 (TRUE), else it is set to
+0.
+
+We used the glm() function and the train dataset to create the logistic
+model.
+
+> **glm(mil_plus\~., family="binomial", data=kc.train_logreg_p5[ ,-1])**
+
+After fitting the model, we check for goodness of fit by determining the
+McFadden's R-squared value. For our case that value is
+**0.477727456824142**. This value is considered quite high for
+McFadden's R-squared, which indicates that our model fits the data very
+well and has high predictive power.
+
+We also determine the VIF values for each predictors used in the model.
+VIF values above 5 indicate multicollinearity. None of our predictors
+have a VIF over 5. We can assume that multicollinearity is not an issue
+in our model.
+
+The next step was to use the predict() function to predict of the house
+can sell for over one million dollars. The prediction is run against the
+test data. To gauge the performance, we calculated the confusion matrix
+below. The model did a great job predicting houses not worth one
+million, but it did a really bad job at predicting house worth over a
+million. It predicted 37 houses worth over one million correctly. It
+also wrongly predicted 402 lesser houses to be worth over one million.
+Even with this dismal prediction, the accuracy rate was 93.7%. This is
+mainly due to the fact that there are much more houses worth less than
+one million dollars.
+
+Confusion Matrix and Statistics
+
+```         
+      Reference
+```
+
+Prediction 0 1 0 6010 402 1 2 37
+
+```         
+           Accuracy : 0.9374          
+             95% CI : (0.9312, 0.9432)
+No Information Rate : 0.9319          
+P-Value [Acc > NIR] : 0.04273         
+                                      
+              Kappa : 0.1453          
+                                      
+```
+
+Mcnemar's Test P-Value : \< 2e-16
+
+```         
+        Sensitivity : 0.084282        
+        Specificity : 0.999667        
+     Pos Pred Value : 0.948718        
+     Neg Pred Value : 0.937305        
+         Prevalence : 0.068051        
+     Detection Rate : 0.005736        
+```
+
+Detection Prevalence : 0.006046\
+Balanced Accuracy : 0.541975
+
+-   
+
+------------------------------------------------------------------------
+
+### a) Clean data
+
+```{r}
+
+# I am planning to build a NN model
+# There are 70 zipcode dummy variables.
+# Looking to reduce that number.
+# One way is to average the house price for each zipcode.
+# Bin them into 3 categories, below, average, and above.
+# This will reduce 70 vars down to 3.
+```
+
+```{r}
+kc.raw_p5 <- read.csv('KC_House_Sales.csv')
+
+str(kc.raw_p5)
+```
+
+```{r}
+
+
+library(readr)
+
+# Clean data
+
+clean_data = function(clean.data) {
+
+  clean.data$view = factor(clean.data$view, ordered = TRUE, levels=c('0','1','2','3','4'))
+  clean.data$condition = factor(clean.data$condition, ordered = TRUE, levels=c('1','2','3','4','5'))
+  clean.data$grade = factor(ifelse(clean.data$grade <= 3,'low',ifelse(clean.data$grade >= 11,'high','average')))
+  
+  clean.data$sale_date = substring(clean.data$date,1,8)
+  clean.data$sale_date = as.Date(clean.data$sale_date, format="%Y%m%d")
+  
+  clean.data$month_of_sale = substring(clean.data$date,5,6)
+  
+  # Create sale_qtr column 
+  # We suspect that season may affect price. 
+  #Months of sales were categorized into quarters. 
+  tmpMonth = as.integer(substring(clean.data$date,5,6)) 
+  clean.data$sale_qtr = factor(ifelse((tmpMonth <= 3), 'q1', ifelse((tmpMonth >= 4 & tmpMonth <= 6), 'q2', ifelse((tmpMonth >= 7 & tmpMonth <= 9), 'q3', 'q4'))))
+  
+  # Convert price to numeric
+  clean.data$price = parse_number(clean.data$price)
+  
+  # Add a renovation dummy variables
+  clean.data$renovated = ifelse(clean.data$yr_renovated > 0, 1, 0)
+  
+  # Remove unneeded columns 
+  clean.data = clean.data[, -c(1, 2, 18, 19)]
+  
+  # Return cleaned dataset
+  return(clean.data) 
+}
+```
+
+```{r}
+# Clean the dataset
+kc.clean <- clean_data(kc.raw_p5) 
+head(kc.clean) 
+str(kc.clean)
+```
+
+```{r}
+
+# Too many zipcodes
+# Zipcode plays significant role in determine price.
+# Categorize zipcodes into 'below', 'average', and 'above'
+
+library(rlist)
+
+df = kc.clean
+
+zlist = unique(unlist(df$zipcode))
+
+zMeanPriceList = list() 
+zArray = list()
+
+for (z in 1:length(zlist)) { 
+  tmpMean = mean(df[df$zipcode == zlist[[z]],]$price) 
+  tmpZip = zlist[[z]]
+  zMeanPriceList = append(zMeanPriceList, tmpMean)
+  zArray = append(zArray, c(tmpZip, tmpMean))
+  result = array(zArray,dim = c(2,70))
+  result = t(result)
+}
+
+list1 = unlist(result[,1]) 
+list2 = unlist(result[,2])
+
+newdf = data.frame('zip' = list1, 'mean_price' = list2)
+
+new_result = newdf[order(newdf$mean_price), ]
+
+v1 = new_result[1:23,1] 
+v2 = new_result[24:46,1] 
+v3 = new_result[47:70,1]
+```
+
+```{r}
+# Create new column call zip_price
+# zip_price contains 'below', 'average', and 'above'
+
+df2 = kc.clean
+
+for (i in 1:nrow(df2)) { 
+  #print(df2[i,]$zipcode) 
+  if (df2[i,]$zipcode %in% v1) 
+  { df2[i, 'zip_price']='below' 
+    } 
+  if (df2[i,]$zipcode %in% v2) { 
+    df2[i, 'zip_price']='average' 
+    } 
+  if (df2[i,]$zipcode %in% v3) { 
+    df2[i, 'zip_price']='above' 
+    } 
+}
+
+str(df2)
+```
+
+```{r}
+
+# Creating dummy variables for categorical variables
+# The first dummy variable for each categorical variable will be dropped
+# The original categorical variable will be also dropped
+
+# Load the library
+library(fastDummies)
+
+df3 = df2
+
+# Create dummy variables for zip_price
+df3 = dummy_cols(df3, select_columns = "zip_price", remove_first_dummy =
+TRUE) 
+df3 = df3[,!names(df3) %in% c("zip_price")]
+
+# Create dummy variables for sale_qtr
+df3 = dummy_cols(df3, select_columns = "sale_qtr", remove_first_dummy =
+TRUE)
+
+# Create dummy variables for grade
+df3 = dummy_cols(df3, select_columns = "grade", remove_first_dummy =
+TRUE)
+
+# Create dummy variables for condition
+df3 = dummy_cols(df3, select_columns = "condition", remove_first_dummy =
+TRUE)
+
+# Create dummy variables for view
+df3 = dummy_cols(df3, select_columns = "view", remove_first_dummy =
+TRUE)
+df3 = df3[,!names(df3) %in% c("zip_price","sale_qtr","grade","condition","view", "month_of_sale", "zipcode", "yr_renovated")]
+
+kc.clean_p5 = df3
+
+# Print
+str(kc.clean_p5)
+```
+
+```{r}
+# Preparing the data: feature-wise normalization
+df3 = kc.clean_p5[ ,-13]
+
+normalize <- function(x) {return((x - min(x)) / (max(x) - min(x)))}
+kc.normalized_p5 <- as.data.frame(lapply(df3, normalize))
+
+#head(kc.normalized_p5) 
+str(kc.normalized_p5) 
+#summary(kc.normalized_p5)
+```
+
+```{r}
+# Split data into training and test data
+# The test data will be used for our in sample testing
+
+set.seed(1023) 
+sample = sample(c(TRUE, FALSE), nrow(kc.normalized_p5), replace=TRUE, prob=c(0.7,0.3)) 
+kc.train_p5 = kc.normalized_p5[sample, ]
+kc.test_p5 = kc.normalized_p5[!sample, ]
+
+# Sorting the dataset by sale_date
+kc.clean_p5_ordered = kc.clean_p5[order(kc.clean_p5$sale_date),]
+
+# Normalizing the ordered dataset
+df3 = kc.clean_p5_ordered[,-13]
+
+normalize <- function(x) {return((x - min(x)) / (max(x) - min(x)))}
+kc.clean_p5_ordered_norm = as.data.frame(lapply(df3, normalize))
+
+str(kc.clean_p5_ordered_norm)
+```
+
+```{r}
+
+# Splitting the ordered dataset into train and test
+
+# We are training the NN with data up to a certain date.
+
+# Then we will test with data beyond that date.
+
+# This will serve as our out of sample testing
+
+kc.train_ordered_norm_p5 = kc.clean_p5_ordered_norm[1:15129, -c(12,13,17,18,19)] 
+kc.test_ordered_norm_p5 = kc.clean_p5_ordered_norm[15130:21613, -c(12,13,17,18,19)]
+```
+
+------------------------------------------------------------------------
+
+### b) Create models
+
+```{r, eval=FALSE, echo=TRUE}
+
+# Creating the neural network model
+
+# NN model has 28 inputs and 1 output, price
+
+# There are 2 hidden layers each having 2 nodes
+
+
+library(neuralnet)
+
+softplus <- function(x) { log(1 + exp(x)) }
+
+kc.nn_model1 <- neuralnet(price ~ .,data = kc.train_ordered_norm_p5,hidden =c(2, 2), act.fct = softplus, stepmax=1e+07) 
+
+kc.nn_model2 <- neuralnet(price ~ .,data = kc.train_ordered_norm_p5, hidden =c(5, 3), act.fct = softplus, stepmax=1e7) 
+
+kc.nn_model3 <- neuralnet(price ~.,data = kc.train_ordered_norm_p5, hidden =c(5, 5), act.fct = softplus, stepmax=1e7)
+
+plot(kc.nn_model1)
+
+plot(kc.nn_model2)
+
+plot(kc.nn_model3)
+
+```
+
+------------------------------------------------------------------------
+
+### c) Test models
+
+```{r, eval=FALSE, echo=TRUE}
+
+# Un-Normalize function
+
+unnormalize <- function(x) {return((x *(max(kc.clean_p5$price)) -min(kc.clean_p5$price)) +min(kc.clean_p5$price))}
+
+# Out of Sample test for NN Model 1
+
+kc.nn_results1 <- compute(kc.nn_model1, kc.test_ordered_norm_p5[,-1])
+predicted_price1 <-kc.nn_results1$net.result 
+cor1 = cor(predicted_price1, kc.test_ordered_norm_p5$price)
+
+df_price1 = data.frame( actual = kc.test_ordered_norm_p5$price, pred=predicted_price1)
+
+df_price1$actual_new = unnormalize(kc.test_ordered_norm_p5$price)
+df_price1$pred_new = unnormalize(df_price1$pred)
+df_price1$error <- df_price1$pred_new - df_price1$actual_new
+
+sse1 = sum(df_price1$error^2)
+
+rmse1 = sqrt(sse1/nrow(kc.test_ordered_norm_p5))
+
+print(head(df_price1, n = 5))
+
+sprintf("Correlation for NN model 1: %f", cor1)
+
+sprintf("SSE for NN model 1: %f", sse1)
+
+sprintf("RMSE for NN model 1: %f", rmse1)
+
+# Out of Sample test for NN Model 2
+
+kc.nn_results2 <- compute(kc.nn_model2, kc.test_ordered_norm_p5[,-1])
+predicted_price2 <-kc.nn_results2$net.result 
+cor2 = cor(predicted_price2, kc.test_ordered_norm_p5$price)
+
+df_price2 = data.frame( actual = kc.test_ordered_norm_p5$price, pred =
+predicted_price2)
+
+df_price2$actual_new = unnormalize(kc.test_ordered_norm_p5$price)
+df_price2$pred_new = unnormalize(df_price2$pred)
+df_price2$error = df_price2$pred_new - df_price2$actual_new
+
+sse2 = sum(df_price2$error^2)
+
+rmse2 = sqrt(sse2/nrow(kc.test_ordered_norm_p5))
+
+print(head(df_price2, n = 5))
+
+sprintf("Correlation for NN model 2: %f", cor2)
+
+sprintf("SSE for NN model 2: %f", sse2)
+
+sprintf("RMSE for NN model 2: %f", rmse2)
+
+# Out of Sample test for NN Model 3
+
+kc.nn_results3 <- compute(kc.nn_model3, kc.test_ordered_norm_p5[,-1])
+predicted_price3 <- kc.nn_results3$net.result 
+cor3 = cor(predicted_price3, kc.test_ordered_norm_p5$price)
+
+df_price3 = data.frame( actual = kc.test_ordered_norm_p5$price, pred =
+predicted_price3)
+
+df_price3$actual_new = unnormalize(kc.test_ordered_norm_p5$price)
+df_price3$pred_new = unnormalize(df_price3$pred)
+df_price3$error = df_price3$pred_new - df_price3$actual_new
+
+sse3 = sum(df_price3$error^2)
+
+rmse3 = sqrt(sse3/nrow(kc.test_ordered_norm_p5))
+
+print(head(df_price3, n = 5))
+
+sprintf("Correlation for NN model 3: %f", cor3)
+
+sprintf("SSE for NN model 3: %f", sse3)
+
+sprintf("RMSE for NN model 3: %f", rmse3)
+```
+
+```{r, eval=FALSE, echo=TRUE}
+
+# In Sample test for NN Model 1
+
+kc.nn_results1 <- compute(kc.nn_model1, kc.test_p5[,-1])
+predicted_price1 <-
+kc.nn_results1$net.result 
+cor1_in = cor(predicted_price1, kc.test_p5$price)
+
+df_price1 = data.frame( actual = kc.test_p5$price, pred =
+predicted_price1)
+
+df_price1$actual_new = unnormalize(kc.test_p5$price)
+df_price1$pred_new = unnormalize(df_price1$pred)
+df_price1$error = df_price1$pred_new - df_price1$actual_new
+
+sse1_in = sum(df_price1$error^2)
+
+rmse1_in = sqrt(sse1_in/nrow(kc.test_p5))
+
+print(head(df_price1, n = 5))
+
+sprintf("Correlation for NN model 1: %f", cor1_in)
+
+sprintf("SSE for NN model 1: %f", sse1_in)
+
+sprintf("RMSE for NN model 1: %f", rmse1_in)
+```
+
+```{r, eval=FALSE, echo=TRUE}
+
+# In Sample test for NN Model 2
+
+kc.nn_results2 <- compute(kc.nn_model2, kc.test_p5[,-1])
+predicted_price2 <-
+kc.nn_results2$net.result 
+cor2_in = cor(predicted_price2, kc.test_p5$price)
+
+df_price2 = data.frame( actual = kc.test_p5$price, pred =
+predicted_price2)
+
+df_price2$actual_new = unnormalize(kc.test_p5$price)
+df_price2$pred_new = unnormalize(df_price2$pred)
+df_price2$error = df_price2$pred_new - df_price2$actual_new
+
+sse2_in = sum(df_price2$error^2)
+
+rmse2_in = sqrt(sse2_in/nrow(kc.test_p5))
+
+print(head(df_price2, n = 5))
+
+sprintf("Correlation for NN model 2: %f", cor2_in)
+
+sprintf("SSE for NN model 2: %f", sse2_in)
+
+sprintf("RMSE for NN model 2: %f", rmse2_in)
+```
+
+```{r, eval=FALSE, echo=TRUE}
+
+# In Sample test for NN Model 3
+
+kc.nn_results3 <- compute(kc.nn_model3, kc.test_p5[,-1])
+predicted_price3 <-
+kc.nn_results3$net.result 
+cor3_in = cor(predicted_price3, kc.test_p5$price)
+
+df_price3 = data.frame( actual = kc.test_p5$price, pred =
+predicted_price3)
+
+df_price3$actual_new = unnormalize(kc.test_p5$price)
+df_price3$pred_new = unnormalize(df_price3$pred)
+df_price3$error <- df_price3$pred_new - df_price2$actual_new
+
+sse3_in = sum(df_price3$error^2)
+
+rmse3_in = sqrt(sse3_in/nrow(kc.test_p5))
+
+print(head(df_price3, n = 5))
+
+sprintf("Correlation for NN model 3: %f", cor3_in)
+
+sprintf("SSE for NN model 3: %f", sse3_in)
+
+sprintf("RMSE for NN model 3: %f", rmse3_in)
+```
+
+------------------------------------------------------------------------
+
+### d) Logistic model
+
+```{r}
+
+# Logistic Regression
+
+# Build a model to predict if a house estimates over 1 million dollars
+
+df4 = kc.clean_p5[ ,-13]
+
+df4$mil_plus = ifelse(df4$price > 1000000, 1, 0)
+
+#Use 70% of dataset as training set and remaining 30% as testing set
+set.seed(1023) 
+sample = sample(c(TRUE, FALSE), nrow(df4), replace=TRUE,prob=c(0.7,0.3)) 
+kc.train_logreg_p5 = df4[sample, ] 
+kc.test_logreg_p5 = df4[!sample, ]
+
+kc.train_logreg_p5 = kc.train_logreg_p5[ ,-c(4, 7, 8, 15, 19, 20, 22,23)] 
+kc.test_logreg_p5 = kc.test_logreg_p5[ ,-c(4, 7, 8, 15, 19, 20, 22,23)]
+
+#fit logistic regression model 
+logreg_model <- glm(mil_plus~., family="binomial", data=kc.train_logreg_p5[ ,-1])
+
+summary(logreg_model)
+
+str(kc.train_logreg_p5[ ,-c(1,21)])
+
+
+library(pscl) 
+library(car)
+
+pR2(logreg_model)["McFadden"]
+
+vif(logreg_model)
+
+#calculate probability of default for each individual in test dataset
+predicted <- predict(logreg_model, kc.test_logreg_p5, type="response")
+
+library(caret)
+
+predprob = predict(logreg_model, newdata = kc.test_logreg_p5[ ,-c(1)], type="response")
+
+predout = ifelse(predprob > 0.95, 1, 0) 
+acty = kc.test_logreg_p5$mil_plus
+
+predout = factor(predout) 
+acty = factor(acty)
+
+train_con_mat = confusionMatrix(predout, acty, positive = '1')
+print(train_con_mat)
+```
+
+## VI. Model Limitation and Assumptions
+
+**Please refer to the previous sections for model validation.**
+
+Out of the models we've tested, our first finalist is original linear
+model with the log-transformed 'price'. While we have tried various
+methods for improving it (ex. lasso and ridge based models), none have
+significantly out-performed the original model. Given that all the
+linear models perform about as well as each other (R-squared of 0.86 on
+test data), we select the simplest one because it's the easiest to
+understand and troubleshoot. Based on the diagnostics, there are no
+serious violations of the model assumptions. Despite the fat tails
+(which is still an improvement over kc.linear) on the QQ plot and the
+presence of several outlier/leverage points, the model isn't damaged, as
+evidenced by the model performing the same with those observations
+removed. Of course, this model rests on the same assumptions of all
+linear models, such as error normality.
+
+Our second finalist is our second neural network model. Among the neural
+network models, model 2 has the highest correlation (88%) and lowest
+RMSE. As a neural network model, many of the assumptions needed for a
+linear model are relaxed.
+
+In choosing between these two models, there are several considerations.
+First, how often do you want to update your model? Because neural
+networks are more fitted to training data, re-training often is
+important to maintaining good fit. Second, what is the model being used
+to predict? The neural network model may be more useful for predicting
+future home prices because it includes time series data. Third, who is
+using the model? The linear model is more easily comprehensible and
+easier to troubleshoot; the neural network is a black box. Fourth, will
+the structure of the data change? The linear model will perform best if
+the predictor variables are distributed and related to each other as
+they are in the training data. The neural network is more flexible and
+may be able to take into account changes to the real estate market or
+inflation. Both finalist models perform well - choosing the right one to
+use depends on these considerations.
+
+## VII. Ongoing Model Monitoring Plan
+
+Provided we will have access to outcome data, the most important
+statistic for the linear model is R-squared. If it starts to fall as new
+data comes in, it is time to reexamine it and update or replace the
+model. In addition, one should pay attention to how new data is
+structured. If, for example, variables increase in collinearity, the
+model might need to be updated with a remedial method like Ridge or
+Lasso. Lastly, one should pay attention to the environment from which
+the data is drawn. If there are changes to things like property law,
+school districts, taxes, or inflation, the model will likely need to be
+adjusted.
+
+The neural network model is more relaxed about its assumptions about the
+underlying data but more fragile due to its tendency to overfit training
+data. The most important metric to pay attention to is its out-of-sample
+correlation. Given the properties of a neural net, we would expect to
+have to retrain the model more frequently, perhaps every couple of
+months in order to keep the correlation high.
+
+## VIII. Conclusion
+
+We've tested several linear models and applied a variety of remedial
+methods. We've also fitted three neural networks and a logistic
+regression model. Of these, our two best models are our original linear
+regression with log('price') (R-squared of 0.86) and our second neural
+network model (out-of-sample correlation of 88%).
+
+Choosing between these models depends on several considerations as to
+their use (please see section VI for more information).
+
+## Bibliography
+
+1.  Zach, October 28, 2020, *How to Perform Logistic Regression in R*,
+    Statology, April 25, 2023,
+    <https://www.statology.org/logistic-regression-in-r/>.
+
+2.  Gogtas, H. (2022, November 28). Neural Networks [Presentation].
+
+3.  Getting Real about Real Estate: A Machine Learning Categorization
+    Model, A. (2022). Getting Real about Real Estate: A Machine Learning
+    Categorization Model [Bachelor of Science in Engineering, Princeton
+    University].
+
+4.  "How to Identify Unusual Observations on Your Regression Model with
+    R? \| by Michaelino Mervisiano \| Towards Data Science." n.d.
+    Accessed May 1, 2023.
+    <https://towardsdatascience.com/how-to-detect-unusual-observations-on-your-regression-model-with-r-de0eaa38bc5b>.
+
+5.  "Understanding QQ Plots \| University of Virginia Library Research
+    Data Services + Sciences." n.d. Accessed May 1, 2023.
+    <https://data.library.virginia.edu/understanding-q-q-plots/>.
+
+6.  Varshney, Paras. 2020. "Q-Q Plots Explained." Medium. October
+    17, 2020.
+    <https://towardsdatascience.com/q-q-plots-explained-5aa8495426c0>. 
+
+7.  Zach. 2019. "A Guide to Multicollinearity & VIF in Regression."
+    Statology (blog). March 10, 2019.
+    <https://www.statology.org/multicollinearity-regression/>.
+
+## Appendix
+
+Box plots and Histograms for each of the dependent variables vs
+independent variable (price)
+
+```{r}
+par(mfrow=c(1,3))
+
+for (col in 2:ncol(kc.raw)) {
+  hist(kc.raw[,col], xlab=names(kc.raw)[col], main='', labels=TRUE)
+  boxplot(kc.raw[,col], xlab=names(kc.raw)[col], main='')
+  plot(kc.raw[,col], kc.raw$price, xlab=names(kc.raw)[col], ylab='Price')
+}
+
+```
+
+All Other plots and charts are included in their respective sections
