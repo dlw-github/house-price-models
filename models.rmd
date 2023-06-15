@@ -30,7 +30,23 @@ editor_options:
     wrap: 72
 ---
 
-## House Sales in King County, USA data to be used in the Final Project
+## Summary
+
+We use house sales data to predict home prices in King County, USA.
+These predictions could potentially be helpful in home appraisal and
+help determine the fair market value of a home.
+
+We build various models to predict the price of homes based off data of
+over 20,000 King's County house sales in 2014 and 2015. Using 20
+variables about various properties of the houses, we construct a variety
+of models, included linear, logistic, and neural net models, to predict
+price accurately.
+
+We test our models on approximately 6,000 observations in the sampled
+test data set and make recommendations on the best models, their uses,
+and their limitations.
+
+## Data overview
 
 |   Variable    | Description                                                                                                                                                                                           |
 |:------------------------------------:|:---------------------------------|
@@ -56,33 +72,7 @@ editor_options:
 | sqft_living15 | *The square footage of interior housing living space for the nearest 15 neighbors*                                                                                                                    |
 |  sqft_lot15   | *The square footage of the land lots of the nearest 15 neighbors*                                                                                                                                     |
 
-## Executive Summary
-
-We use KC Home Sales Data to predict home prices in King County, USA. We
-processed this data and explored Linear, WLS, robust, ridge, elastic net
-lasso regressions, NN and logistic models and select models for use
-
-## I. Introduction
-
-The problem at hand is to provide estimates of home prices in King
-County, USA. These predictions could potentially be helpful in home
-appraisal and help determine the fair market value of a home.
-
-We build various models to predict the price of homes based off data of
-over 20,000 King's County house sales in 2014 and 2015. Using 20
-variables about various properties of the houses, we construct a variety
-of models, included linear, logistic, and neural net models, to predict
-price accurately.
-
-We reviewed model diagnostics with application of appropriate
-transformations as needed.
-
-We test our models on approximately 6,000 observations in the sampled
-test data set and provided performance of each of those in Section IV
-(d) and Section V. In the concluding sections, we make recommendations
-on the best models, their uses, and their limitations..
-
-## II. Description of the data and quality
+## Data inspection
 
 ### a) Install packages and import data
 
@@ -273,7 +263,7 @@ cor(kc.raw)
 
 ------------------------------------------------------------------------
 
-### e) Transform variables
+## Data cleaning
 
 Based on the data exploration in the previous steps, we need to make
 various changes to our variables before fitting a model. There are
@@ -289,7 +279,7 @@ Out of the 4 dummy variables created, 3 ('waterfront', 'renovated',
 not.
 
 | Variable      | Transformation                                 | Rationale                                                                                                                                                                                  |
-|------------------|------------------|------------------------------------|
+|-------------------|-------------------|-----------------------------------|
 | id            | Remove                                         | Irrelevant index column                                                                                                                                                                    |
 | date          | Create dummy variable for year (2014\|2015)    | Observations are clustered at the start of each year. We are creating a time-series analysis                                                                                               |
 | price         | Change to numeric                              | Needs to be continuous. Originally coded as a character variable                                                                                                                           |
@@ -365,7 +355,7 @@ plot(kc.clean$hasBasement, kc.clean$price, xlab='hasBasement', ylab='Price')
 plot(kc.clean$year_sold, kc.clean$price, xlab='year_sold', ylab='Price')
 ```
 
-## III. Model Development Process
+## Fitting linear models
 
 ### a) Create training and test data sets
 
@@ -476,7 +466,7 @@ more information.
 We do identify several high leverage points which are outliers, which
 may have an outsized effect on the model. Looking at these observations,
 we do not find reason to exclude them although it may be useful to
-weight the observations, which will will explore in the next section.
+weight the observations, which will will explore later.
 
 As shown by the VIF table, there is no indication of multicollinearity
 in the model.
@@ -572,7 +562,7 @@ library(car)
 vif(kc.linear.transformed)
 ```
 
-## IV. Model Performance Testing
+## Assess performance of linear models
 
 ### a) Create Stepwise model
 
@@ -602,15 +592,14 @@ anova(kc.stepwise) # All variables significant
 ### b) Review diagnostic plots
 
 The diagnostic plots of the stepwise model look similar to those of the
-original model (the log transformed model developed in section III (e)).
+original model (the log transformed model developed previously.
 
 Residuals vs Fitted graph show the errors to be fairly constant (no
 Heteroskedasticity)
 
 The heavy tails visible in the Q-Q plot (but its much better compared to
-the Q-Q plot for Kc.linear model as shown in Section III (c)),
-indicating that the errors may not be exactly fully normally
-distributed.
+the Q-Q plot for Kc.linear model as shown previously, indicating that
+the errors may not be exactly fully normally distributed.
 
 The VIF table doesn't reveal any problems with collinearity.
 
@@ -792,7 +781,7 @@ names(all.model.results) = c('SSE', 'R-Squared', 'MSE', 'RMSE')
 all.model.results
 ```
 
-## V. Challenger Models
+## Train neural networks
 
 We have elected to build a Neural Network Model to predict house prices.
 Before fitting the NN Model, we perform some data wrangling. The
@@ -995,24 +984,11 @@ Balanced Accuracy : 0.541975
 ### a) Clean data
 
 ```{r}
-
-# I am planning to build a NN model
-# There are 70 zipcode dummy variables.
-# Looking to reduce that number.
-# One way is to average the house price for each zipcode.
-# Bin them into 3 categories, below, average, and above.
-# This will reduce 70 vars down to 3.
-```
-
-```{r}
 kc.raw_p5 <- read.csv('KC_House_Sales.csv')
-
 str(kc.raw_p5)
 ```
 
 ```{r}
-
-
 library(readr)
 
 # Clean data
@@ -1232,15 +1208,16 @@ plot(kc.nn_model3)
 
 ------------------------------------------------------------------------
 
-### c) Test models
+## Assess performance of neural networks
+
+```{r, eval=FALSE, echo=TRUE}
+# Un-Normalize function
+unnormalize <- function(x) {return((x *(max(kc.clean_p5$price)) -min(kc.clean_p5$price)) +min(kc.clean_p5$price))}
+```
 
 ```{r, eval=FALSE, echo=TRUE}
 
-# Un-Normalize function
-
-unnormalize <- function(x) {return((x *(max(kc.clean_p5$price)) -min(kc.clean_p5$price)) +min(kc.clean_p5$price))}
-
-# Out of Sample test for NN Model 1
+# Out of Sample test for NN Model 2
 
 kc.nn_results1 <- compute(kc.nn_model1, kc.test_ordered_norm_p5[,-1])
 predicted_price1 <-kc.nn_results1$net.result 
@@ -1263,6 +1240,11 @@ sprintf("Correlation for NN model 1: %f", cor1)
 sprintf("SSE for NN model 1: %f", sse1)
 
 sprintf("RMSE for NN model 1: %f", rmse1)
+
+```
+
+```{r, eval=FALSE, echo=TRUE}
+
 
 # Out of Sample test for NN Model 2
 
@@ -1288,6 +1270,10 @@ sprintf("Correlation for NN model 2: %f", cor2)
 sprintf("SSE for NN model 2: %f", sse2)
 
 sprintf("RMSE for NN model 2: %f", rmse2)
+
+```
+
+```{r, eval=FALSE, echo=TRUE}
 
 # Out of Sample test for NN Model 3
 
@@ -1409,7 +1395,6 @@ sprintf("RMSE for NN model 3: %f", rmse3_in)
 ```{r}
 
 # Logistic Regression
-
 # Build a model to predict if a house estimates over 1 million dollars
 
 df4 = kc.clean_p5[ ,-13]
@@ -1439,6 +1424,9 @@ library(car)
 pR2(logreg_model)["McFadden"]
 
 vif(logreg_model)
+```
+
+```{r}
 
 #calculate probability of default for each individual in test dataset
 predicted <- predict(logreg_model, kc.test_logreg_p5, type="response")
@@ -1457,9 +1445,7 @@ train_con_mat = confusionMatrix(predout, acty, positive = '1')
 print(train_con_mat)
 ```
 
-## VI. Model Limitation and Assumptions
-
-**Please refer to the previous sections for model validation.**
+## Conclusions
 
 Out of the models we've tested, our first finalist is original linear
 model with the log-transformed 'price'. While we have tried various
@@ -1495,8 +1481,6 @@ may be able to take into account changes to the real estate market or
 inflation. Both finalist models perform well - choosing the right one to
 use depends on these considerations.
 
-## VII. Ongoing Model Monitoring Plan
-
 Provided we will have access to outcome data, the most important
 statistic for the linear model is R-squared. If it starts to fall as new
 data comes in, it is time to reexamine it and update or replace the
@@ -1515,8 +1499,6 @@ correlation. Given the properties of a neural net, we would expect to
 have to retrain the model more frequently, perhaps every couple of
 months in order to keep the correlation high.
 
-## VIII. Conclusion
-
 We've tested several linear models and applied a variety of remedial
 methods. We've also fitted three neural networks and a logistic
 regression model. Of these, our two best models are our original linear
@@ -1524,52 +1506,4 @@ regression with log('price') (R-squared of 0.86) and our second neural
 network model (out-of-sample correlation of 88%).
 
 Choosing between these models depends on several considerations as to
-their use (please see section VI for more information).
-
-## Bibliography
-
-1.  Zach, October 28, 2020, *How to Perform Logistic Regression in R*,
-    Statology, April 25, 2023,
-    <https://www.statology.org/logistic-regression-in-r/>.
-
-2.  Gogtas, H. (2022, November 28). Neural Networks [Presentation].
-
-3.  Getting Real about Real Estate: A Machine Learning Categorization
-    Model, A. (2022). Getting Real about Real Estate: A Machine Learning
-    Categorization Model [Bachelor of Science in Engineering, Princeton
-    University].
-
-4.  "How to Identify Unusual Observations on Your Regression Model with
-    R? \| by Michaelino Mervisiano \| Towards Data Science." n.d.
-    Accessed May 1, 2023.
-    <https://towardsdatascience.com/how-to-detect-unusual-observations-on-your-regression-model-with-r-de0eaa38bc5b>.
-
-5.  "Understanding QQ Plots \| University of Virginia Library Research
-    Data Services + Sciences." n.d. Accessed May 1, 2023.
-    <https://data.library.virginia.edu/understanding-q-q-plots/>.
-
-6.  Varshney, Paras. 2020. "Q-Q Plots Explained." Medium. October
-    17, 2020.
-    <https://towardsdatascience.com/q-q-plots-explained-5aa8495426c0>. 
-
-7.  Zach. 2019. "A Guide to Multicollinearity & VIF in Regression."
-    Statology (blog). March 10, 2019.
-    <https://www.statology.org/multicollinearity-regression/>.
-
-## Appendix
-
-Box plots and Histograms for each of the dependent variables vs
-independent variable (price)
-
-```{r}
-par(mfrow=c(1,3))
-
-for (col in 2:ncol(kc.raw)) {
-  hist(kc.raw[,col], xlab=names(kc.raw)[col], main='', labels=TRUE)
-  boxplot(kc.raw[,col], xlab=names(kc.raw)[col], main='')
-  plot(kc.raw[,col], kc.raw$price, xlab=names(kc.raw)[col], ylab='Price')
-}
-
-```
-
-All Other plots and charts are included in their respective sections
+their use.
